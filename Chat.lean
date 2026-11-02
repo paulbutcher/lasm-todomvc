@@ -113,7 +113,7 @@ structure Model where
   generation : Nat := 0
   draft : String := ""
   /-- Set when Enter sends the draft. The browser then inserts the newline it was going to, and
-  the input event carrying it must not bring the sent text back. -/
+  what the input event carrying it reports must not become the new draft. -/
   swallowNewline : Bool := false
   error : Option String := none
   /-- The panel's width in pixels, once the divider has been dragged. -/
