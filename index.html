@@ -1,14 +1,18 @@
 <!doctype html>
+<!-- Copyright (c) 2026 Paul Butcher. All rights reserved.
+     Released under Apache 2.0 license as described in the file LICENSE. -->
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>lasm-todomvc</title>
-    <link rel="stylesheet" href="./style.css">
-    <!-- lasm build injects the app's loader and preload hints here. -->
+    <title>Lasm.UI • TodoMVC</title>
+    <link rel="stylesheet" href="style.css">
   </head>
   <body>
-    <main id="app" data-lasm-app></main>
-    <noscript>This app needs JavaScript and WebAssembly.</noscript>
+    <div id="app" data-lasm-app></div>
+    <footer class="info">
+      <p>Double-click to edit a todo</p>
+      <p>Written in Lean with <a href="https://github.com/Millillion/lasm/blob/main/docs/UI.md">Lasm.UI</a>; its update is proved to keep the model valid</p>
+    </footer>
   </body>
 </html>

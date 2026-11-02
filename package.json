@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "a browser app in Lean (Lasm.UI): a counter, compiled to WebAssembly by Lasm",
+  "description": "TodoMVC in Lean (Lasm.UI), compiled to WebAssembly by Lasm",
   "scripts": {
     "dev": "lasm dev Main.lean --target browser",
     "build": "lasm build Main.lean --target browser",

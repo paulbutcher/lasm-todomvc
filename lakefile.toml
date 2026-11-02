@@ -2,9 +2,9 @@ name = "lasm_todomvc"
 version = "0.1.0"
 defaultTargets = ["app"]
 
-# Pure Lean modules (App.lean).
+# The model and update, with proofs (Todo.lean).
 [[lean_lib]]
-name = "App"
+name = "Todo"
 
 # The program: Main.lean. Lasm builds it with `lasm build Main.lean`.
 [[lean_exe]]
