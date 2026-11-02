@@ -3,24 +3,27 @@ Copyright (c) 2026 Paul Butcher. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 -/
 /-
-TodoMVC (https://todomvc.com) in Lean with Lasm.UI. The state and update are
-in Todo.lean, with proofs that every reachable model is valid; this file is the
-view, storage and routing. Build: lasm build Main.lean --target browser.
+TodoMVC (https://todomvc.com) in Lean with Lasm.UI, beside a chat panel that can
+read and change the list (Chat.lean). The state and update are in Todo.lean,
+with proofs that every reachable model is valid; this file is the view, storage,
+routing, and the request the chat sends. Build: lasm build Main.lean --target browser.
 -/
-import Lean.Data.Json.Parser
-import Lean.Data.Json.Printer
+import Json
 import Lasm.UI
+import Lasm.Web
+import LLMClient.Fetch
 import Todo
+import Chat
 open Lasm.UI Todo
 
 /-! Storage: the todos as JSON in localStorage. -/
 
 def toJson (todos : List Item) : String :=
-  (Lean.Json.arr (todos.toArray.map fun t =>
-    Lean.Json.mkObj [("id", (t.id : Nat)), ("title", t.title), ("completed", t.completed)])).compress
+  (Json.arr (todos.toArray.map fun t =>
+    Json.mkObj [("id", Json.ofNat t.id), ("title", t.title), ("completed", t.completed)])).compress
 
 def fromJson (s : String) : List Item :=
-  match Lean.Json.parse s with
+  match Json.parse s with
   | .ok (.arr items) => items.toList.filterMap fun j => do
       let id ← (j.getObjValAs? Nat "id").toOption
       let title ← (j.getObjValAs? String "title").toOption
@@ -93,17 +96,59 @@ def view (m : Model) : Html Msg :=
                    </footer>]}
         </section>
 
+/-! The chat's request, the one effect it needs the browser for -/
+
+def request : Chat.Request := fun c generation history =>
+  Cmd.ofEffect (.io fun dispatch => Lasm.Web.background do
+    let config := Chat.config c.vendor
+    let provider := match c.vendor with
+      | .anthropic => LLMClient.Claude.providerWith LLMClient.Fetch.transport c.key config
+      | .openai => LLMClient.OpenAI.providerWith LLMClient.Fetch.transport c.key config
+    let reply ← provider.sendRequest history ChatTools.tools
+    dispatch (.replied generation reply))
+
 /-! The app -/
 
-def app : App Unit Model Msg where
-  init _ url := ({ filter := filterOf url },
-    Cmd.batch [Cmd.storageGet storageKey fun s => .loaded (fromJson (s.getD "[]")), Cmd.focus "new-todo"])
-  update msg m :=
-    let (m', cmd) := Todo.update toJson msg m
-    match msg with
-    | .startEdit id => (m', cmd ++ Cmd.focus (editId id))
-    | _ => (m', cmd)
-  view := view
-  onUrlChange := some fun u => .setFilter (filterOf u)
+structure AppModel where
+  todo : Model
+  chat : Chat.Model := {}
+
+inductive AppMsg where
+  | todo (msg : Msg)
+  | chat (msg : Chat.Msg)
+
+def updateTodo (msg : Msg) (m : Model) : Model × Cmd Msg :=
+  let (m', cmd) := Todo.update toJson msg m
+  match msg with
+  | .startEdit id => (m', cmd ++ Cmd.focus (editId id))
+  | _ => (m', cmd)
+
+/-- The chat's tools change the list without a `Msg` of the app's own, so the list is saved here
+whenever a chat message leaves it different. -/
+def updateChat (msg : Chat.Msg) (m : AppModel) : AppModel × Cmd AppMsg :=
+  let (todo, chat, cmd) := Chat.update request msg m.todo m.chat
+  let save := if todo.todos == m.todo.todos then .none else Cmd.storageSet storageKey (toJson todo.todos)
+  ({ todo, chat }, Cmd.batch [cmd.map .chat, save])
+
+def appView (m : AppModel) : Html AppMsg :=
+  div [class_ "app-shell"]
+    ([div [class_ "app-pane"]
+       [(view m.todo).map .todo,
+        html! <footer class="info">
+                <p>Double-click to edit a todo</p>
+                <p>Written in Lean with <a href="https://github.com/Millillion/lasm/blob/main/docs/UI.md">Lasm.UI</a>; its update is proved to keep the model valid</p>
+              </footer>]] ++
+     (Chat.view m.chat).map (·.map .chat))
+
+def app : App Unit AppModel AppMsg where
+  init _ url := ({ todo := { filter := filterOf url } },
+    Cmd.batch [Cmd.storageGet storageKey fun s => .todo (.loaded (fromJson (s.getD "[]"))),
+      Cmd.focus "new-todo", Chat.init.map .chat])
+  update
+    | .todo msg, m => let (todo, cmd) := updateTodo msg m.todo; ({ m with todo }, cmd.map .todo)
+    | .chat msg, m => updateChat msg m
+  view := appView
+  subscriptions m := (Chat.subscriptions m.chat).map .chat
+  onUrlChange := some fun u => .todo (.setFilter (filterOf u))
 
 def main : IO Unit := app.run

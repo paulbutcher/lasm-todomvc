@@ -48,6 +48,11 @@ inductive Msg where
   | setFilter (f : Filter)
   /-- Todos read from storage at startup. -/
   | loaded (todos : List Item)
+  /-- The chat's tools: adding by title, and setting a title or completion outright. A title that
+  is blank once trimmed adds nothing, and deletes the todo it is given to, as an edit does. -/
+  | addTitled (title : String)
+  | setTitle (id : Nat) (title : String)
+  | setCompleted (id : Nat) (completed : Bool)
 
 /-- Trimmed text (titles never start or end with whitespace). -/
 def clean (s : String) : String := s.trimAscii.toString
@@ -108,6 +113,17 @@ def step (msg : Msg) (m : Model) : Model :=
   | .loaded todos =>
     let todos := sanitize todos
     { m with todos, nextId := max m.nextId (maxId todos), editing := none }
+  | .addTitled title =>
+    let title := clean title
+    if title = "" then m
+    else { m with todos := m.todos ++ [{ id := m.nextId, title, completed := false }], nextId := m.nextId + 1 }
+  | .setTitle id title =>
+    let title := clean title
+    if title = "" then
+      let todos := m.todos.filter (·.id ≠ id)
+      { m with todos, editing := keepEditing todos m.editing }
+    else { m with todos := m.todos.map (setTitle id title) }
+  | .setCompleted id b => { m with todos := m.todos.map (setCompleted id fun _ => b) }
 
 /-! Invariant -/
 
@@ -190,6 +206,64 @@ theorem keepEditing_mem {todos : List Item} {ed : Option (Nat × String)} {e : N
       exact List.mem_map.mpr ⟨t, ht, by simpa using he⟩
     · simp at h
   · simp at h
+
+/-- Removing todos keeps the invariant, provided an edit of a removed todo is dropped. Deleting,
+clearing completed todos and blanking a title all remove todos this way.
+
+`p` answers `true` for each todo to keep and `m` is any valid model. The claim is that the model
+with only the kept todos, and with `keepEditing` deciding whether the edit survives, is valid. -/
+theorem inv_filter (p : Item → Bool) (m : Model) (h : Inv m) :
+    Inv { m with todos := m.todos.filter p, editing := keepEditing (m.todos.filter p) m.editing } where
+  nodup := by simp only [ids]; exact h.nodup.sublist (List.filter_sublist.map _)
+  fresh t ht := h.fresh t (List.mem_filter.mp ht).1
+  titles t ht := h.titles t (List.mem_filter.mp ht).1
+  editing _ _ he := keepEditing_mem he
+
+/-- Changing todos in place keeps the invariant, provided no change touches an id or blanks a
+title. Completing and retitling todos are changes of this kind.
+
+`f` is the change made to every todo: `hid` says it keeps each id, and `htitle` that it never
+turns a non-empty title into an empty one. `m` is any valid model, and the claim is that applying
+`f` to each of its todos leaves it valid. -/
+theorem inv_map (f : Item → Item) (hid : ∀ t, (f t).id = t.id)
+    (htitle : ∀ t, t.title ≠ "" → (f t).title ≠ "") (m : Model) (h : Inv m) :
+    Inv { m with todos := m.todos.map f } where
+  nodup := by simp only [ids]; rw [map_ids_of_id_eq hid]; exact h.nodup
+  fresh t ht := by
+    obtain ⟨u, hu, rfl⟩ := List.mem_map.mp ht
+    rw [hid]; exact h.fresh u hu
+  titles t ht := by
+    obtain ⟨u, hu, rfl⟩ := List.mem_map.mp ht
+    exact htitle u (h.titles u hu)
+  editing e s he := by
+    simp only [ids]; rw [map_ids_of_id_eq hid]; exact h.editing e s he
+
+/-- Appending a todo with a non-empty title under the next id keeps the invariant. Adding from the
+input field and adding from the chat both do this.
+
+`title` is the new todo's title, which `hne` says is not empty, and `m` is any valid model. The
+claim is that `m` with that todo appended, and `nextId` moved past its id, is valid. -/
+theorem inv_append (title : String) (hne : title ≠ "") (m : Model) (h : Inv m) :
+    Inv { m with todos := m.todos ++ [{ id := m.nextId, title, completed := false }], nextId := m.nextId + 1 } where
+  nodup := by
+    simp only [ids, List.map_append, List.map_cons, List.map_nil]
+    refine List.nodup_append.mpr ⟨h.nodup, by simp, ?_⟩
+    intro a ha b hb
+    simp at hb
+    subst hb
+    rcases List.mem_map.mp ha with ⟨t, ht, rfl⟩
+    exact Nat.ne_of_lt (h.fresh t ht)
+  fresh t ht := by
+    rcases List.mem_append.mp ht with ht | ht
+    · exact Nat.lt_succ_of_lt (h.fresh t ht)
+    · simp at ht; subst ht; exact Nat.lt_succ_self _
+  titles t ht := by
+    rcases List.mem_append.mp ht with ht | ht
+    · exact h.titles t ht
+    · simp at ht; subst ht; exact hne
+  editing e s he := by
+    simp only [ids, List.map_append, List.mem_append]
+    exact Or.inl (h.editing e s he)
 
 /-- `step` keeps the invariant. -/
 theorem step_inv (msg : Msg) (m : Model) (h : Inv m) : Inv (step msg m) := by
@@ -321,6 +395,23 @@ theorem step_inv (msg : Msg) (m : Model) (h : Inv m) : Inv (step msg m) := by
     · intro t ht
       rcases sanitize_sub todos t ht with ⟨u, _, hc, rfl⟩
       exact hc
+  | addTitled title =>
+    simp only [step]
+    split
+    · exact h
+    · next hne => exact inv_append _ hne m h
+  | setTitle id title =>
+    simp only [step]
+    split
+    · exact inv_filter (fun t => decide (t.id ≠ id)) m h
+    · next hne =>
+      refine inv_map _ (fun t => by unfold setTitle; split <;> rfl) (fun t ht => ?_) m h
+      unfold setTitle; split
+      · exact hne
+      · exact ht
+  | setCompleted id b =>
+    exact inv_map _ (fun t => by unfold setCompleted; split <;> rfl)
+      (fun t ht => by unfold setCompleted; split <;> exact ht) m h
 
 /-! What the actions do -/
 

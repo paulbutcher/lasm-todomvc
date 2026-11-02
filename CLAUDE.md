@@ -4,11 +4,10 @@ Guidance for Claude Code, and any other coding agent, working in this repo. Cont
 
 ## Verifying Lean changes
 
-- After editing a `.lean` file, verify it with `mcp__lean-lsp__lean_diagnostic_messages` (or other lean-lsp-mcp tools, e.g. `lean_goal`/`lean_multi_attempt` for interactive proof/termination work).
-- Ignore the editor's `<ide_diagnostics>` hook output.
-- If a change adds or removes an `import`, use `mcp__lean-lsp__lean_build` instead of (or in addition to) plain `lake build`.
-- Before considering a task complete, run `lake build` and `lake test` from the repo root as the final ground truth.
-- All Lean code must compile without warnings; the build treats warnings as errors.
+- `import Lasm.*` resolves only under Lasm's own Lean, which `npx lasm editor` (also run by `npm run dev` and `npm run build`) links as this directory's elan override; `lake`, `lean` and lean-lsp-mcp all need it. If it says the toolchain "is already installed", the link dangles: `elan toolchain uninstall` it and rerun.
+- After editing a `.lean` file, verify it with `mcp__lean-lsp__lean_diagnostic_messages` (or other lean-lsp-mcp tools, e.g. `lean_goal`/`lean_multi_attempt` for interactive proof/termination work), and with `mcp__lean-lsp__lean_build` if a change adds or removes an `import`. Ignore the editor's `<ide_diagnostics>` hook output.
+- All Lean code must compile without warnings, but neither Lake nor `lasm build` fails on one, so build with `lake build --wfail Todo Main Tests` (`Tests` is `lake test`, where compiling is passing). Plain `lake build` fails regardless: its default target, the native `app` executable, cannot link, since Lasm.UI's runtime exists only in the Wasm build.
+- UnicodeBasic compiles C, which the override's toolchain has no headers for, so run that `lake` from the toolchain `npm run build` uses: the `~/.cache/lasm/derived/*` directory with an `include/`, put first on `PATH`. Before considering a task complete, run that, `npm run build` and `npm test` as the final ground truth.
 
 ## Commenting
 
@@ -68,10 +67,10 @@ Applies to published libraries. An application keeps its tests in the same packa
 
 ## What to test
 
-- Write tests alongside new code, as long as they comply with the rules below.
+- Write tests alongside new code, as long as they comply with the rules below. `update` and `view` are pure, so state claims about them in Lean; use Playwright 1.64.1 (the Chromium `.devcontainer/setup.sh` installs) only for what needs a browser.
 - Don't write tests which wholly or largely restate literals from the source with no computation in between. Ask first: could this fail from a real behaviour regression, or only by retyping the expected value wrong?
 - Don't test the functionality of dependencies unless asked to, or unless there is evidence of a bug. Assume dependencies do what they claim to do.
-- Don't check HTML structure. Tests like that are too fragile; abstract away from the precise markup so they survive the UI evolving.
+- Don't check HTML structure. Tests like that are too fragile; abstract away from the precise markup so they survive the UI evolving, which rules out comparing `Lasm.UI.render` output with a literal.
 - A test of wire behaviour must not depend on how the network happens to split a write. Loopback coalesces sends, so a response written in pieces is usually read in one go, and such a test passes whether or not the code can resume from a partial read. Force the case by size, past the reader's own buffer.
 
 ## Proofs and properties
@@ -113,4 +112,4 @@ Applies where this project emits logs or spans. If it does not, skip this sectio
 
 Applies where this project serves a UI. If it does not, skip this section.
 
-- Interaction should be entirely via HTMX wherever possible. Never use JavaScript unless it is essential.
+- The UI is Lasm.UI: every interaction is a `Msg` handled by `update`, and effects go through `Cmd`. Never use JavaScript unless it is essential.
