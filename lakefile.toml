@@ -27,3 +27,7 @@ globs = ["Tests.+"]
 [[lean_exe]]
 name = "app"
 root = "Main"
+
+[[require]]
+name = "lasm"
+path = ".lake/lasm-library"
