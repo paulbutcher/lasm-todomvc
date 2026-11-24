@@ -6,7 +6,7 @@ testDriver = "Tests"
 [[require]]
 name = "LLMClient"
 git = "https://github.com/paulbutcher/lean-llmclient"
-rev = "v0.12.0"
+rev = "v0.13.0"
 
 [[require]]
 name = "markdown"
@@ -16,7 +16,7 @@ rev = "v0.9.0"
 # The model and update, with proofs (Todo.lean).
 [[lean_lib]]
 name = "Todo"
-roots = ["Todo", "Markdown", "ChatTools", "Chat"]
+roots = ["Effects", "Todo", "Markdown", "ChatTools", "Chat"]
 
 # Theorems about the above, and tests; building them is passing.
 [[lean_lib]]

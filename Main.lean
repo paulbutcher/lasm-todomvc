@@ -10,7 +10,6 @@ routing, and the request the chat sends. Build: lasm build Main.lean --target br
 -/
 import Json
 import Lasm.UI
-import Lasm.Web
 import LLMClient.Fetch
 import Todo
 import Chat
@@ -99,13 +98,12 @@ def view (m : Model) : Html Msg :=
 /-! The chat's request, the one effect it needs the browser for -/
 
 def request : Chat.Request := fun c generation history =>
-  Cmd.ofEffect (.io fun dispatch => Lasm.Web.background do
+  Cmd.task do
     let config := Chat.config c.vendor
     let provider := match c.vendor with
       | .anthropic => LLMClient.Claude.providerWith LLMClient.Fetch.transport c.key config
       | .openai => LLMClient.OpenAI.providerWith LLMClient.Fetch.transport c.key config
-    let reply ← provider.sendRequest history ChatTools.tools
-    dispatch (.replied generation reply))
+    return .replied generation (← provider.sendRequest history ChatTools.tools)
 
 /-! The app -/
 
@@ -120,14 +118,14 @@ inductive AppMsg where
 def updateTodo (msg : Msg) (m : Model) : Model × Cmd Msg :=
   let (m', cmd) := Todo.update toJson msg m
   match msg with
-  | .startEdit id => (m', cmd ++ Cmd.focus (editId id))
+  | .startEdit id => (m', cmd ++ Effects.focus (editId id))
   | _ => (m', cmd)
 
 /-- The chat's tools change the list without a `Msg` of the app's own, so the list is saved here
 whenever a chat message leaves it different. -/
 def updateChat (msg : Chat.Msg) (m : AppModel) : AppModel × Cmd AppMsg :=
   let (todo, chat, cmd) := Chat.update request msg m.todo m.chat
-  let save := if todo.todos == m.todo.todos then .none else Cmd.storageSet storageKey (toJson todo.todos)
+  let save := if todo.todos == m.todo.todos then .none else Effects.storageSet storageKey (toJson todo.todos)
   ({ todo, chat }, Cmd.batch [cmd.map .chat, save])
 
 def appView (m : AppModel) : Html AppMsg :=
@@ -142,8 +140,8 @@ def appView (m : AppModel) : Html AppMsg :=
 
 def app : App Unit AppModel AppMsg where
   init _ url := ({ todo := { filter := filterOf url } },
-    Cmd.batch [Cmd.storageGet storageKey fun s => .todo (.loaded (fromJson (s.getD "[]"))),
-      Cmd.focus "new-todo", Chat.init.map .chat])
+    Cmd.batch [Effects.storageGet storageKey fun s => .todo (.loaded (fromJson (s.getD "[]"))),
+      Effects.focus "new-todo", Chat.init.map .chat])
   update
     | .todo msg, m => let (todo, cmd) := updateTodo msg m.todo; ({ m with todo }, cmd.map .todo)
     | .chat msg, m => updateChat msg m

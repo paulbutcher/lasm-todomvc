@@ -8,7 +8,7 @@ invariant `Inv`: todo ids are distinct and below `nextId`, titles are
 non-empty, and the todo being edited exists. Theorems below also pin down
 what the main actions do (toggle all, clear completed, add, delete).
 -/
-import Lasm.UI.Cmd
+import Effects
 
 namespace Todo
 
@@ -462,7 +462,7 @@ def storageKey : String := "todos-lasm"
 encodes them for storage (the view module passes a JSON encoder). -/
 def update (save : List Item → String) (msg : Msg) (m : Model) : Model × Lasm.UI.Cmd Msg :=
   let m' := step msg m
-  (m', if m'.todos == m.todos then .none else Lasm.UI.Cmd.storageSet storageKey (save m'.todos))
+  (m', if m'.todos == m.todos then .none else Effects.storageSet storageKey (save m'.todos))
 
 theorem update_inv (save : List Item → String) (msg : Msg) (m : Model) (h : Inv m) : Inv (update save msg m).1 :=
   step_inv msg m h

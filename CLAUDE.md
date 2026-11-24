@@ -7,7 +7,7 @@ Guidance for Claude Code, and any other coding agent, working in this repo. Cont
 - `import Lasm.*` resolves only under Lasm's own Lean, which `npx lasm editor` (also run by `npm run dev` and `npm run build`) links as this directory's elan override; `lake`, `lean` and lean-lsp-mcp all need it. If it says the toolchain "is already installed", the link dangles: `elan toolchain uninstall` it and rerun.
 - After editing a `.lean` file, verify it with `mcp__lean-lsp__lean_diagnostic_messages` (or other lean-lsp-mcp tools, e.g. `lean_goal`/`lean_multi_attempt` for interactive proof/termination work), and with `mcp__lean-lsp__lean_build` if a change adds or removes an `import`. Ignore the editor's `<ide_diagnostics>` hook output.
 - All Lean code must compile without warnings, but neither Lake nor `lasm build` fails on one, so build with `lake build --wfail Todo Main Tests` (`Tests` is `lake test`, where compiling is passing). Plain `lake build` fails regardless: its default target, the native `app` executable, cannot link, since Lasm.UI's runtime exists only in the Wasm build.
-- UnicodeBasic compiles C, which the override's toolchain has no headers for, so run that `lake` from the toolchain `npm run build` uses: the `~/.cache/lasm/derived/*` directory with an `include/`, put first on `PATH`. Before considering a task complete, run that, `npm run build` and `npm test` as the final ground truth.
+- Before considering a task complete, run that, `npm run build` and `npm test`, as CI does. After a Lasm or dependency bump, run them in a clean checkout: stale objects in `.lake` can link APIs the new version removed.
 
 ## Commenting
 

@@ -149,7 +149,7 @@ with `.replied generation`. It is the one effect that needs the browser, so the 
 abbrev Request := Credentials → Nat → Array LLMClient.Msg → Cmd Msg
 
 def saveTranscript (history : Array LLMClient.Msg) : Cmd Msg :=
-  Cmd.storageSet transcriptStorageKey (encodeTranscript history)
+  Effects.storageSet transcriptStorageKey (encodeTranscript history)
 
 /-- Ends the turn with `history` as the conversation, closed off so that it can be continued. -/
 def finish (m : Model) (history : Array LLMClient.Msg) (error : Option String) : Model × Cmd Msg :=
@@ -192,7 +192,7 @@ def update (request : Request) (msg : Msg) (todo : Todo.Model) (m : Model) :
     match decodeCredentials s with
     | .ok c => only ({ m with credentials := some c, vendor := c.vendor }, .none)
     | .error e => only ({ m with error := some s!"The saved key could not be read ({e})." },
-        Cmd.storageRemove keyStorageKey (storage := .session))
+        Effects.storageRemove keyStorageKey (store := Lasm.JS.Web.sessionStorage))
   | .transcriptLoaded none => only (m, .none)
   | .transcriptLoaded (some s) =>
     match decodeTranscript s with
@@ -207,10 +207,10 @@ def update (request : Request) (msg : Msg) (todo : Todo.Model) (m : Model) :
     else
       let c := { vendor := m.vendor, key }
       only ({ m with credentials := some c, keyField := "", error := none },
-        Cmd.batch [Cmd.storageSet keyStorageKey (encodeCredentials c) (storage := .session),
-          Cmd.focus "chat-prompt"])
+        Cmd.batch [Effects.storageSet keyStorageKey (encodeCredentials c) (store := Lasm.JS.Web.sessionStorage),
+          Effects.focus "chat-prompt"])
   | .forgetKey =>
-    only ({ m with credentials := none }, Cmd.storageRemove keyStorageKey (storage := .session))
+    only ({ m with credentials := none }, Effects.storageRemove keyStorageKey (store := Lasm.JS.Web.sessionStorage))
   | .updateDraft s =>
     if m.swallowNewline then only ({ m with swallowNewline := false }, .none)
     else only ({ m with draft := s }, .none)
@@ -244,21 +244,21 @@ def update (request : Request) (msg : Msg) (todo : Todo.Model) (m : Model) :
     | none => only (m, .none)
   | .newChat =>
     only ({ m with history := #[], inFlight := none, generation := m.generation + 1, error := none },
-      Cmd.storageRemove transcriptStorageKey)
+      Effects.storageRemove transcriptStorageKey)
   | .startDrag => only ({ m with dragging := true }, .none)
   | .drag x viewport => only ({ m with width := some (clampWidth x viewport) }, .none)
   | .stopDrag => only ({ m with dragging := false }, .none)
 
 def init : Cmd Msg :=
-  Cmd.batch [Cmd.storageGet keyStorageKey .keyLoaded (storage := .session),
-    Cmd.storageGet transcriptStorageKey .transcriptLoaded]
+  Cmd.batch [Effects.storageGet keyStorageKey .keyLoaded (store := Lasm.JS.Web.sessionStorage),
+    Effects.storageGet transcriptStorageKey .transcriptLoaded]
 
 def subscriptions (m : Model) : Subs Msg :=
   if m.dragging then
     Subs.batch [
-      Subs.onDocument "pointermove"
+      Subs.on .document "pointermove"
         (Decoder.map2 Msg.drag Decoder.clientX (Decoder.float ["view", "innerWidth"])),
-      Subs.onDocument "pointerup" (.succeed .stopDrag)]
+      Subs.on .document "pointerup" (.succeed .stopDrag)]
   else .none
 
 /-! The view -/
@@ -346,7 +346,7 @@ def view (m : Model) : List (Html Msg) :=
         (m.width.map fun w => style "flex-basis" s!"{w}px").toList)
       (header :: if m.credentials.isSome then promptForm m else keyForm m)
   [div [class_ (if m.dragging then "app-divider dragging" else "app-divider"),
-     preventDefaultOn "pointerdown" (.succeed .startDrag)] [],
+     preventDefaultOn "pointerdown" (.succeed (.startDrag, true))] [],
    panel]
 
 end Chat

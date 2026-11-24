@@ -1,0 +1,31 @@
+# Copyright (c) 2026 Paul Butcher. All rights reserved.
+# Released under Apache 2.0 license as described in the file LICENSE.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      # No default toolchain: the one Lake needs is Lasm's, which `lasm build` links into elan.
+      - name: Install elan
+        run: |
+          curl -fsSL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --no-modify-path --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - run: npm ci
+      # Also sets Lasm's Lean as this directory's elan override, which the lake step needs.
+      - run: npm run build
+      - run: lake build --wfail Todo Main Tests
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
