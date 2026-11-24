@@ -11,7 +11,7 @@ rev = "v0.13.0"
 [[require]]
 name = "markdown"
 git = "https://github.com/paulbutcher/lean-markdown"
-rev = "v0.9.0"
+rev = "v0.9.1"
 
 # The model and update, with proofs (Todo.lean).
 [[lean_lib]]

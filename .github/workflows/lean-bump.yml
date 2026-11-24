@@ -1,0 +1,32 @@
+# Copyright (c) 2026 Paul Butcher. All rights reserved.
+# Released under Apache 2.0 license as described in the file LICENSE.
+
+name: Bump dependencies
+
+on:
+  schedule: [{ cron: '0 6 * * 1' }]
+  repository_dispatch: { types: [lean-dependency-released] }
+  workflow_dispatch:
+
+# Reads only: the push and the PR use the App's token, so the PR's CI runs.
+permissions:
+  contents: read
+
+# One at a time, so bumps started by releases close together never push the branch at once. A newer
+# run replaces one still waiting, and sees every release the older one would have.
+concurrency:
+  group: lean-bump
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ vars.LEAN_BOT_APP_ID }}
+          private-key: ${{ secrets.LEAN_BOT_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+      - uses: paulbutcher/lean-bump@v1
+        with:
+          token: ${{ steps.app.outputs.token }}
